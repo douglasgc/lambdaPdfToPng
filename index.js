@@ -1,23 +1,19 @@
-// dependencies
+// Dependencias
 var async = require('async');
 var AWS = require('aws-sdk');
-// Enable ImageMagick integration.
 var gm = require('gm').subClass({ imageMagick: true });
 var util = require('util');
 var pdf2png = require('pdf2png');
 pdf2png.ghostscriptPath = "/usr/bin";
 
-// constants
-var MAX_WIDTH  = 320;
-var MAX_HEIGHT = 320;
 
-// get reference to S3 client 
+
 var s3 = new AWS.S3();
+
+
 exports.handler = function(event, context) {
-  // Read options from the event.
-  console.log("Reading options from event:\n", util.inspect(event, {depth: 5}));
+
   var srcBucket = event.Records[0].s3.bucket.name;
-  // Object key may have spaces or unicode non-ASCII characters.
   var srcKey    =
     decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, " "));  
   var isTest = srcBucket.indexOf('-test') >= 0;
@@ -28,13 +24,11 @@ exports.handler = function(event, context) {
   }
   var dstKey    = srcKey;
 
-  // Sanity check: validate that source and destination are different buckets.
   if (srcBucket == dstBucket) {
     console.error("Destination bucket must not match source bucket.");
     return;
   }
 
-  // Infer the image type.
   var typeMatch = srcKey.match(/\.([^.]*)$/);
   if (!typeMatch) {
     console.error('unable to infer image type for key ' + srcKey);
@@ -46,10 +40,8 @@ exports.handler = function(event, context) {
     return;
   }
 
-  // Download the image from S3, transform, and upload to a different S3 bucket.
   async.waterfall([
       function download(next) {
-        // Download the image from S3 into a buffer.
         s3.getObject({
           Bucket: srcBucket,
           Key: srcKey
@@ -68,10 +60,9 @@ exports.handler = function(event, context) {
         } else {
 
         gm(response.Body).size(function(err, size) {
-          // Infer the scaling factor to avoid stretching the image unnaturally.
           var scalingFactor = Math.min(
-              MAX_WIDTH / size.width,
-              MAX_HEIGHT / size.height
+              size.width,
+              size.height
               );
           var width  = scalingFactor * size.width;
           var height = scalingFactor * size.height;
@@ -89,7 +80,6 @@ exports.handler = function(event, context) {
 }
       },
       function upload(contentType, data, next) {
-        // Stream the transformed image to a different S3 bucket.
         var ext = '';
         if (imageType == "pdf") {
           ext = '.png';
@@ -122,4 +112,4 @@ exports.handler = function(event, context) {
       context.done();
     }
   );
-};
+};  
